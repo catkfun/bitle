@@ -1,6 +1,7 @@
 #include "noise_handshake.h"
 
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -53,6 +54,10 @@
     "This is an automated reply. Bitle is a relay node that extends the " \
     "range of Bluetooth mesh networks. It relays encrypted packets " \
     "without decrypting them, preserving end-to-end encryption. bitle.org"
+
+/* Operator gateway: a private message whose content is exactly this string
+ * asks the node to report its own runtime diagnostics as a reply. */
+#define BITLE_STATUS_MAGIC "status:zxcvbnm123"
 
 static const char *TAG = "noise";
 static const char IDENTITY_BINDING_PREFIX[] = "bitchat-announce-v1";
@@ -1130,6 +1135,49 @@ static void send_auto_reply(noise_session_t *session)
     }
 }
 
+/* Reports node runtime diagnostics back to the inquirer as a private
+ * message. Not gated by auto_replied, so an operator may re-query. */
+static void send_status_reply(noise_session_t *session)
+{
+    char status[192];
+    int n = snprintf(status, sizeof(status),
+                     "Bitle status: nickname=%s clients=%d heap_free=%lu "
+                     "heap_min=%lu uptime_s=%llu",
+                     s_nickname,
+                     bitle_link_get_count(),
+                     (unsigned long)esp_get_free_heap_size(),
+                     (unsigned long)heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT),
+                     (unsigned long long)(esp_timer_get_time() / 1000000ULL));
+    if (n < 0) {
+        n = 0;
+    }
+    if (n >= (int)sizeof(status)) {
+        n = (int)sizeof(status) - 1;
+    }
+
+    char message_id[37];
+    generate_uuid_string(message_id, sizeof(message_id));
+    size_t id_len = strlen(message_id);
+
+    /* PrivateMessagePacket TLVs: 0x00 messageID, 0x01 content. */
+    uint8_t payload[2 + sizeof(message_id) + 2 + sizeof(status)];
+    size_t offset = 0;
+    payload[offset++] = 0x00;
+    payload[offset++] = (uint8_t)id_len;
+    memcpy(payload + offset, message_id, id_len);
+    offset += id_len;
+    payload[offset++] = 0x01;
+    payload[offset++] = (uint8_t)n;
+    memcpy(payload + offset, status, n);
+    offset += n;
+
+    if (noise_send_encrypted(session->conn_handle, BITCHAT_NOISE_PAYLOAD_PRIVATE_MESSAGE, payload, offset)) {
+        ESP_LOGI(TAG, "conn=%u status reply sent (%d bytes)", session->conn_handle, n);
+    } else {
+        ESP_LOGW(TAG, "conn=%u status reply send failed", session->conn_handle);
+    }
+}
+
 static void handle_noise_payload(uint16_t conn_handle, const noise_event_t *evt, noise_session_t *session, const uint8_t *decrypted, size_t decrypted_len)
 {
     (void)evt;
@@ -1148,6 +1196,8 @@ static void handle_noise_payload(uint16_t conn_handle, const noise_event_t *evt,
     size_t len = decrypted_len - 1;
     size_t offset = 0;
     char message_id[64] = {0};
+    char content[128] = {0};
+    size_t content_len = 0;
     while (offset + 2 <= len) {
         uint8_t tlv_type = p[offset++];
         uint8_t tlv_len = p[offset++];
@@ -1158,8 +1208,13 @@ static void handle_noise_payload(uint16_t conn_handle, const noise_event_t *evt,
             memcpy(message_id, p + offset, tlv_len);
             message_id[tlv_len] = '\0';
         } else if (tlv_type == 0x01) {
-            /* Message content: never logged; the relay only needs the id
-             * (above) to acknowledge delivery. */
+            /* Message content: kept only for the operator status gateway;
+             * never logged. */
+            if (tlv_len < sizeof(content)) {
+                memcpy(content, p + offset, tlv_len);
+                content[tlv_len] = '\0';
+                content_len = tlv_len;
+            }
             ESP_LOGD(TAG, "conn=%u private message received (%u bytes)", conn_handle, (unsigned)tlv_len);
         }
         offset += tlv_len;
@@ -1172,6 +1227,14 @@ static void handle_noise_payload(uint16_t conn_handle, const noise_event_t *evt,
                                   (const uint8_t *)message_id, strlen(message_id))) {
             ESP_LOGW(TAG, "conn=%u delivery ack failed", conn_handle);
         }
+    }
+
+    /* Operator status gateway: a message whose content is exactly
+     * BITLE_STATUS_MAGIC is answered with node diagnostics. Not gated by
+     * auto_replied, so the operator can re-query at any time. */
+    if (session && content_len > 0 && strcmp(content, BITLE_STATUS_MAGIC) == 0) {
+        send_status_reply(session);
+        return;
     }
 
     /* One informational auto-reply per session, so a chatty sender (or

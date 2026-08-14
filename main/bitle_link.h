@@ -49,6 +49,9 @@ esp_err_t bitle_link_register(uint16_t handle, bitle_link_type_t type, bitle_lin
 void bitle_link_unregister(uint16_t handle);
 bool bitle_link_ready(uint16_t handle);
 
+/* Returns the number of currently registered links (i.e. connected peers). */
+int bitle_link_get_count(void);
+
 esp_err_t bitle_link_send(uint16_t handle, const uint8_t *data, uint16_t len);
 
 /* Sends to every registered link except exclude_handle (BITLE_LINK_NONE to

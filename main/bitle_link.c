@@ -81,6 +81,19 @@ bool bitle_link_ready(uint16_t handle)
     return ready;
 }
 
+int bitle_link_get_count(void)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    int count = 0;
+    for (size_t i = 0; i < BITLE_LINK_MAX; ++i) {
+        if (s_links[i].in_use) {
+            count++;
+        }
+    }
+    xSemaphoreGive(s_lock);
+    return count;
+}
+
 esp_err_t bitle_link_send(uint16_t handle, const uint8_t *data, uint16_t len)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
