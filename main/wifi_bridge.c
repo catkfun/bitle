@@ -165,13 +165,38 @@ static void connect_tcp(void)
     if (fd < 0) {
         return;
     }
-    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        ESP_LOGW(TAG, "TCP connect to %s:%d failed", WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT);
+    /* 非阻塞 connect：避免在整个 TCP 握手期间卡住主任务（默认阻塞 connect
+     * 在 peer 无响应时会长达数十秒，冻结 BLE mesh 轮询）。用 select 收敛。 */
+    int fl = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+
+    int rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    if (rc < 0 && errno != EINPROGRESS) {
+        ESP_LOGW(TAG, "TCP connect to %s:%d failed (%d)", WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT, errno);
         close(fd);
         return;
     }
+
+    fd_set wfds;
+    FD_ZERO(&wfds);
+    FD_SET(fd, &wfds);
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    rc = select(fd + 1, NULL, &wfds, NULL, &tv);
+    if (rc <= 0) {
+        ESP_LOGW(TAG, "TCP connect to %s:%d timeout", WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT);
+        close(fd);
+        return;
+    }
+    int serr = 0;
+    socklen_t elen = sizeof(serr);
+    getsockopt(fd, SOL_SOCKET, SO_ERROR, &serr, &elen);
+    if (serr != 0) {
+        ESP_LOGW(TAG, "TCP connect to %s:%d error (%d)", WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT, serr);
+        close(fd);
+        return;
+    }
+    struct timeval rt = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &rt, sizeof(rt));
     s_sock = fd;
     ESP_LOGI(TAG, "TCP connected to %s:%d", WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT);
     send_hello();
@@ -319,6 +344,10 @@ static void try_recv(void)
 
 void wifi_bridge_poll(void)
 {
+    /* 尚未初始化（s_wifi_events 未建）时直接返回 */
+    if (!s_wifi_events) {
+        return;
+    }
     /* 1) 等 WiFi 起来 */
     EventBits_t bits = xEventGroupGetBits(s_wifi_events);
     if ((bits & WIFI_CONNECTED_BIT) == 0) {

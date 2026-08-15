@@ -91,7 +91,9 @@ void app_main(void)
     /* wt 频道桥接：WiFi 常驻连 VPS 中转，双向同步 mesh 与 wt 消息。
      * 下行消息由 noise 层广播成私信注入 mesh。 */
     wifi_bridge_set_down_cb(noise_bridge_forward_to_mesh);
-    ESP_ERROR_CHECK(wifi_bridge_init());
 
+    /* 先创建设备主任务（BLE/WiFi 全部初始化后再创建会因堆不足而失败，
+     * 导致 bitle_main_task 从未运行），再启动 WiFi。 */
     xTaskCreate(bitle_main_task, "bitle_main", 8192, NULL, tskIDLE_PRIORITY + 5, NULL);
+    ESP_ERROR_CHECK(wifi_bridge_init());
 }
