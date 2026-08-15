@@ -42,7 +42,7 @@ typedef struct {
 static EventGroupHandle_t s_wifi_events;
 static int s_sock = -1;
 static bool s_down_cb_set;
-static void (*s_down_cb)(const char *sender_name, const char *wt, const char *content);
+static int (*s_down_cb)(const char *sender_name, const char *wt, const char *content);
 static up_entry_t s_up_queue[UP_QUEUE_MAX];
 
 static void send_hello(void);
@@ -110,7 +110,7 @@ esp_err_t wifi_bridge_init(void)
     return ESP_OK;
 }
 
-void wifi_bridge_set_down_cb(void (*cb)(const char *, const char *, const char *))
+void wifi_bridge_set_down_cb(int (*cb)(const char *, const char *, const char *))
 {
     s_down_cb = cb;
     s_down_cb_set = (cb != NULL);

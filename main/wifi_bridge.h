@@ -45,7 +45,7 @@ void wifi_bridge_send_up(const uint8_t *sender_id, const char *sender_name,
                          const char *wt, const char *content);
 
 /* 注册下行回调：收到 wt 消息时调用（由 noise 层实现 mesh 广播注入）。 */
-void wifi_bridge_set_down_cb(void (*cb)(const char *sender_name, const char *wt,
+void wifi_bridge_set_down_cb(int (*cb)(const char *sender_name, const char *wt,
                                         const char *content));
 
 #ifdef __cplusplus
