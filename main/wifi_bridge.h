@@ -25,7 +25,7 @@ extern "C" {
 #define WIFI_BRIDGE_PASS        "17533305771"
 #define WIFI_BRIDGE_HOST        "3.17.63.33"
 #define WIFI_BRIDGE_PORT        8099
-#define WIFI_BRIDGE_WT          "room1"      /* 订阅的 wt 聊天频道编码 */
+#define WIFI_BRIDGE_WT          "#wt"        /* 订阅的 wt 频道（BitChat Nostr #<geohash> 频道编码） */
 
 /* 下行消息注入 mesh 时，私信正文每行可携带的最长本地缓存。 */
 #define WIFI_BRIDGE_CONTENT_MAX 128
