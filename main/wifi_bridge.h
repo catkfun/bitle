@@ -21,8 +21,8 @@ extern "C" {
  * ------------------------------------------------------------------------ */
 
 /* 连接参数（可改为 NVS / 私信配置）。 */
-#define WIFI_BRIDGE_SSID        "BITLE_WIFI"
-#define WIFI_BRIDGE_PASS        "bitle123"
+#define WIFI_BRIDGE_SSID        "B408-1000"
+#define WIFI_BRIDGE_PASS        "17533305771"
 #define WIFI_BRIDGE_HOST        "3.17.63.33"
 #define WIFI_BRIDGE_PORT        8099
 #define WIFI_BRIDGE_WT          "room1"      /* 订阅的 wt 聊天频道编码 */
