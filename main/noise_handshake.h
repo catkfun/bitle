@@ -88,6 +88,10 @@ void noise_handle_encrypted(uint16_t conn_handle, const bitchat_packet_t *packet
 void noise_reset_connection(uint16_t conn_handle);
 void noise_notify_subscribed(uint16_t conn_handle);
 const uint8_t *noise_get_local_peer_id(void);
+const char *noise_get_local_nickname(void);
+/* Bridges a wt-channel message into the mesh as a private message to every
+ * established direct peer. Returns the number of peers it was sent to. */
+int noise_bridge_forward_to_mesh(const char *sender_name, const char *wt, const char *content);
 void noise_begin_handshake(uint16_t conn_handle, const uint8_t peer_id[8], const char *nickname);
 bool noise_send_encrypted(uint16_t conn_handle, bitchat_noise_payload_type_t payload_type, const uint8_t *payload, size_t payload_len);
 /* Sends an unsigned, unencrypted packet of the given type (used for the

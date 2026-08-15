@@ -16,6 +16,7 @@
 #include "bitle_sync.h"
 #include "noise_handshake.h"
 #include "packet_codec.h"
+#include "wifi_bridge.h"
 
 static const char *TAG = "bitle_main";
 
@@ -32,6 +33,7 @@ static void bitle_main_task(void *arg)
 #endif
         noise_poll();
         bitchat_time_poll();
+        wifi_bridge_poll();
 
         uint64_t now_ms = esp_timer_get_time() / 1000ULL;
         if (last_heap_log_ms == 0 || now_ms - last_heap_log_ms > 600000ULL) {
@@ -85,6 +87,11 @@ void app_main(void)
     ESP_ERROR_CHECK(bitchat_ble_init());
     ESP_ERROR_CHECK(bitchat_ble_start());
 #endif
+
+    /* wt 频道桥接：WiFi 常驻连 VPS 中转，双向同步 mesh 与 wt 消息。
+     * 下行消息由 noise 层广播成私信注入 mesh。 */
+    wifi_bridge_set_down_cb(noise_bridge_forward_to_mesh);
+    ESP_ERROR_CHECK(wifi_bridge_init());
 
     xTaskCreate(bitle_main_task, "bitle_main", 8192, NULL, tskIDLE_PRIORITY + 5, NULL);
 }
